@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <link crossorigin="anonymous"
+              href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+              integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
+              rel="stylesheet">
+        <script type="importmap">
+            {"imports":{"vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"}}
+        </script>
+        <title>JavaScript Functions Executor</title>
+    </head>
+    <body>
+        <div class="container" id="app">
+            <header class="mb-5 mt-2">
+                <h3 class="text-center">JavaScript Functions Executor</h3>
+            </header>
+            <main class="d-flex flex-column">
+                <div class="mb-3">
+                    <label class="form-label" for="firstFunction">first function</label>
+                    <textarea class="form-control"
+                              id="firstFunction"
+                              placeholder="function name(count) { return count}"
+                              rows="3" v-model="form.firstFunction"
+                    ></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="secondFunction">second function</label>
+                    <textarea class="form-control"
+                              id="secondFunction"
+                              placeholder="function name(count) { return count}"
+                              rows="3"
+                              v-model="form.secondFunction"
+                    ></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="repeat">repeats</label>
+                    <input class="form-control" id="repeat" placeholder="1...n" type="number" v-model="form.repeat">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="alignmentType">result alignment type</label>
+                    <select class="form-select" id="alignmentType" v-model="form.alignmentType">
+                        <option value="BASIC">Basic</option>
+                        <option value="CSV">CSV</option>
+                    </select>
+                </div>
+                <div class="d-flex flex-row d-flex justify-content-end">
+                    <button @click="clear()" class="btn btn-secondary me-3" type="button">Clear</button>
+                    <button @click="execute()" class="btn btn-success" type="button">Run</button>
+                </div>
+                <div class="alert alert-danger" role="alert" v-if="!!this.validateError.show">
+                    {{this.validateError.message}}
+                </div>
+            </main>
+            <footer class="mt-5 d-flex flex-column flex-grow-1">
+                <label class="form-label" for="result">request log</label>
+                <textarea :class="{'border border-success': !!this.loadingRequest}"
+                          class="form-control"
+                          disabled
+                          id="result"
+                          rows="10"
+                          v-model="request"
+                ></textarea>
+            </footer>
+        </div>
+    </body>
+
+    <script th:inline="javascript" type="module">
+        import {createApp} from 'vue';
+        import {fetchEventSource, EventStreamContentType} from '/esm/index.js';
+
+        const requestPath = /*[(${remoteApiPath})]*/ "http://localhost:9090/api/jsFunctionsExecute";
+
+        class RetriableError extends Error {
+        }
+
+        class FatalError extends Error {
+        }
+
+        class NoRepeatError extends Error {
+        }
+
+        createApp({
+            data() {
+                return {
+                    requestUrl: requestPath,
+                    form: {
+                        firstFunction: null,
+                        secondFunction: null,
+                        repeat: null,
+                        alignmentType: null,
+                    },
+                    validateError: {
+                        message: "Все поля должны быть заданы",
+                        show: false,
+                    },
+                    request: null,
+                    abortController: null,
+                    loadingRequest: null
+                };
+            },
+            methods: {
+                execute() {
+                    this.validateError.show = false;
+
+                    console.log("isFormValueNotNull = " + !this.isFormValueNotNull())
+                    if (!this.isFormValueNotNull()) {
+                        this.validateError.show = true;
+                        return;
+                    }
+
+                    this.request = "";
+                    this.loadingRequest = true;
+
+                    if (!!this.abortController) {
+                        this.abortController.abort();
+                    }
+                    this.abortController = new AbortController();
+
+                    const app = this;
+
+                    fetchEventSource(this.requestUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        mode: "cors",
+                        body: JSON.stringify({
+                            firstFunction: this.form.firstFunction,
+                            secondFunction: this.form.secondFunction,
+                            repeatsCount: this.form.repeat,
+                            responseAlignment: this.form.alignmentType,
+                        }),
+                        signal: this.abortController.signal,
+                        async onopen(response) {
+                            if (response.ok && response.headers.get("content-type").includes(EventStreamContentType)) {
+                                return; // everything's good
+                            } else if (response.status >= 400 && response.status < 500 && response.status !== 429 || response.status === 500) {
+                                // client-side errors are usually non-retriable:
+                                throw new FatalError("status:" + response.status + " msg:" + response.statusText);
+                            } else {
+                                throw new RetriableError();
+                            }
+                        },
+                        onmessage(msg) {
+                            if (msg.event === "FatalError") {
+                                throw new FatalError(msg.data);
+                            }
+                            app.request += msg.data + "\n";
+                        },
+                        onclose() {
+                            // if the server closes the connection unexpectedly, retry:
+                            throw new NoRepeatError("close");
+                        },
+                        onerror(err) {
+                            if (err instanceof FatalError || err instanceof NoRepeatError) {
+                                throw err; // rethrow to stop the operation
+                            }
+                        },
+                    }).catch((e) => {
+                        if (e instanceof NoRepeatError) {
+                            //finished request;
+                            this.loadingRequest = false;
+                        } else {
+                            this.request = e.message;
+                        }
+                    });
+                },
+                isFormValueNotNull() {
+                    return this.form.firstFunction != null
+                        && this.form.secondFunction != null
+                        && this.form.repeat != null
+                        && this.form.alignmentType != null;
+                },
+                clear() {
+                    if (!!this.abortController) {
+                        this.abortController.abort();
+                    }
+                    this.loadingRequest = false;
+                    this.form.firstFunction = null;
+                    this.form.secondFunction = null;
+                    this.form.alignmentType = null;
+                    this.form.repeat = null;
+                    this.request = null;
+                    this.validateError.show = false;
+                }
+            }
+        }).mount('#app')
+    </script>
+
+</html>
