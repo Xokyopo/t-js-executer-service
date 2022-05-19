@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -37,7 +38,7 @@ public class ExecuteJsFunctionUseCase {
                 })
                 .repeat(request.getRepeatsCount() - 1)
                 .delayElements(delay)
-                .map(function -> new FunctionResult(1, firstFunctionCounter.incrementAndGet(), function));
+                .map(function -> this.executeFunction(1, firstFunctionCounter.incrementAndGet(), function));
 
         Flux<FunctionResult> secondFunction = Flux
                 .<JsExecuteRule.Function>generate((sink) -> {
@@ -46,7 +47,7 @@ public class ExecuteJsFunctionUseCase {
                 })
                 .repeat(request.getRepeatsCount() - 1)
                 .delayElements(delay)
-                .map(function -> new FunctionResult(2, secondFunctionCounter.incrementAndGet(), function));
+                .map(function -> this.executeFunction(2, secondFunctionCounter.incrementAndGet(), function));
 
 
         if (JsExecuteRequest.AlignmentType.CSV.equals(request.getResponseAlignment())) {
@@ -61,5 +62,13 @@ public class ExecuteJsFunctionUseCase {
         return firstFunction
                 .mergeWith(secondFunction)
                 .map(RESPONSE_FORMAT_RULE::basicResultFormat);
+    }
+
+    private FunctionResult executeFunction(int functionNumber, int iterationCount, JsExecuteRule.Function function) {
+        long beforeStartFunction = new Date().getTime();
+        Object result = function.execute(iterationCount);
+        long afterExecuteFunction = new Date().getTime();
+
+        return new FunctionResult(iterationCount, functionNumber, result, afterExecuteFunction - beforeStartFunction);
     }
 }

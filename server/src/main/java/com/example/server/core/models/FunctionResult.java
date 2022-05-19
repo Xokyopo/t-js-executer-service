@@ -1,9 +1,5 @@
 package com.example.server.core.models;
 
-import com.example.server.core.buisnesruls.JsExecuteRule;
-
-import java.util.Date;
-
 public class FunctionResult {
 
     private final int iterationCount;
@@ -11,13 +7,11 @@ public class FunctionResult {
     private final Object result;
     private final long executedTime;
 
-    public FunctionResult(int functionNumber, int iterationCount, JsExecuteRule.Function function) {
+    public FunctionResult(int iterationCount, int functionNumber, Object result, long executedTime) {
         this.iterationCount = iterationCount;
         this.functionNumber = functionNumber;
-        long beforeStartFunction = new Date().getTime();
-        result = function.execute(iterationCount);
-        long afterExecuteFunction = new Date().getTime();
-        this.executedTime = afterExecuteFunction - beforeStartFunction;
+        this.result = result;
+        this.executedTime = executedTime;
     }
 
     public int getIterationCount() {
