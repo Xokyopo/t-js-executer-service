@@ -16,7 +16,7 @@ public class ExecuteJsFunctionUseCaseTest {
     }
 
     @Test
-    public void use_ShouldReturnTrue_WhenExecuteWithBasicAlignment() throws InterruptedException {
+    public void use_ShouldReturnTrue_WhenExecuteWithBasicAlignment() {
         String firstFunction = "function plus(a) {for (i=0; i < 100000000; i++){}; return a + a}";
         String secondFunction = "function multiple(a) {return a * a}";
         JsExecuteRequest.AlignmentType alignmentType = JsExecuteRequest.AlignmentType.BASIC;
@@ -33,7 +33,7 @@ public class ExecuteJsFunctionUseCaseTest {
     }
 
     @Test
-    public void use_ShouldReturnTrue_WhenExecuteWithCSVAlignment() throws InterruptedException {
+    public void use_ShouldReturnTrue_WhenExecuteWithCSVAlignment() {
         String firstFunction = "function plus(a) { for (i=0; i < 100000000; i++){}; return a + a}";
         String secondFunction = "function multiple(a) {return a * a}";
         JsExecuteRequest.AlignmentType alignmentType = JsExecuteRequest.AlignmentType.CSV;
